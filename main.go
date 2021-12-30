@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	flag "github.com/spf13/pflag"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -22,6 +24,8 @@ var bufferSize int
 var waitTime int
 var verbose bool
 
+var handbrakePresetName string
+
 func main() {
 	flag.Usage = func() {
 		fmt.Print(`
@@ -36,8 +40,7 @@ Options:
 	flag.IntVarP(&watchInterval, "interval", "i", 5, "Interval in seconds between checking for new videos")
 	flag.StringVarP(&convertedSuffix, "suffix", "s", "-x265", "Suffix to add to converted videos. "+
 		"Matching files will be excluded from conversion")
-	flag.StringVarP(&handbrakePreset, "preset", "p", "", "Path to Handbrake preset used for conversion. "+
-		"The PresetName property (not file name) must be exactly \"handbraked\"")
+	flag.StringVarP(&handbrakePreset, "preset", "p", "", "Path to Handbrake preset used for conversion")
 	flag.IntVarP(&minimumSize, "min-size", "m", 1_000_000, "Minimum converted file size in bytes, will otherwise error and terminate")
 	flag.IntVarP(&bufferSize, "buffer-size", "b", 2, "Number of pending videos to always keep intact before starting to convert")
 	flag.IntVarP(&waitTime, "wait-time", "t", 10, "Time in seconds to wait since a video's modification time before starting conversion")
@@ -52,9 +55,18 @@ Options:
 	}
 }
 
+type PresetFormat struct {
+	PresetList []struct {
+		PresetName string `json:"PresetName"`
+	} `json:"PresetList"`
+}
+
 func work() error {
 	if err := validateFlags(); err != nil {
 		return err
+	}
+	if err := parsePresetName(); err != nil {
+		return errors.New("parse preset name: " + err.Error())
 	}
 	log.Println("Started daemon")
 	for {
@@ -63,6 +75,29 @@ func work() error {
 		}
 		<-time.After(time.Duration(watchInterval) * time.Second)
 	}
+}
+
+func parsePresetName() error {
+	presetFile, err := os.Open(handbrakePreset)
+	if err != nil {
+		return err
+	}
+	defer presetFile.Close()
+	presetBytes, err := io.ReadAll(presetFile)
+	if err != nil {
+		return err
+	}
+	var preset PresetFormat
+	if err := json.Unmarshal(presetBytes, &preset); err != nil {
+		return err
+	}
+	if len(preset.PresetList) < 1 {
+		return errors.New("no presets found in file")
+	} else if len(preset.PresetList) > 1 {
+		log.Println("Found more than one preset in file, using first")
+	}
+	handbrakePresetName = preset.PresetList[0].PresetName
+	return nil
 }
 
 func validateFlags() error {
@@ -140,7 +175,7 @@ func removeExtension(inputPath string) string {
 
 func handbrake(inputPath string) error {
 	outputPath := removeExtension(inputPath) + convertedSuffix + filepath.Ext(inputPath)
-	command := exec.Command("HandbrakeCLI", "-i", inputPath, "-o", outputPath, "--preset-import-file", handbrakePreset, "--preset", "handbraked")
+	command := exec.Command("HandbrakeCLI", "-i", inputPath, "-o", outputPath, "--preset-import-file", handbrakePreset, "--preset", handbrakePresetName)
 	output, err := command.CombinedOutput()
 	if err != nil {
 		return errors.New("Handbrake errored:\n" + string(output))
