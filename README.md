@@ -28,3 +28,23 @@ While initially designed for this use case, handbraked is universal enough to wo
 
 >  :warning: Due to the way Topaz Video Enhance AI works, it is hard to tell whether a video file is completely finished processing. To remidy this, a buffer of (by default) 2 videos is always maintained before re-encoding the next video. This works great, but when all of your videos are done, the last 2 will be left untouched. To fix this, re-run handbraked, but this time, set the buffer size to 0 with the argument:  `-b 0`.
 
+## Help
+
+```bash
+$ handbraked -help
+```
+
+```bash
+Usage:
+	handbraked -d WATCH_DIR -p PRESET_PATH [OPTIONS]
+Options:
+  -b, --buffer-size int    Number of pending videos to always keep intact before starting to convert (default 2)
+  -i, --interval int       Interval in seconds between checking for new videos (default 5)
+  -m, --min-size int       Minimum converted file size in bytes, will otherwise error and terminate (default 1000000)
+  -p, --preset string      Path to Handbrake preset used for conversion
+  -s, --suffix string      Suffix to add to converted videos. Matching files will be excluded from conversion (default "-x265")
+  -v, --verbose            Enable verbose logging
+  -t, --wait-time int      Time in seconds to wait since a video's modification time before starting conversion (default 10)
+  -d, --watch-dir string   Directory to watch and automatically convert new videos
+```
+
