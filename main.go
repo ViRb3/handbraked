@@ -50,6 +50,11 @@ Options:
 		flag.Usage()
 		return
 	}
+	var err error
+	handbrakePreset, err = filepath.Abs(handbrakePreset)
+	if err != nil {
+		log.Fatalln(err)
+	}
 	if err := work(); err != nil {
 		log.Fatalln(err)
 	}
@@ -133,6 +138,13 @@ func workLoop() error {
 	var videoKeys []os.DirEntry
 	for _, dir := range dirs {
 		if dir.IsDir() || dir.Name()[0] == '.' || strings.HasSuffix(removeExtension(dir.Name()), convertedSuffix) {
+			continue
+		}
+		absDir, err := filepath.Abs(filepath.Join(watchDir, dir.Name()))
+		if err != nil {
+			return err
+		}
+		if absDir == handbrakePreset {
 			continue
 		}
 		info, err := dir.Info()
