@@ -25,6 +25,12 @@ var waitTime int
 var verbose bool
 
 var handbrakePresetName string
+var fileStats = map[string]FileDiffInfo{}
+
+type FileDiffInfo struct {
+	os.FileInfo
+	CheckTime time.Time
+}
 
 func main() {
 	flag.Usage = func() {
@@ -42,8 +48,8 @@ Options:
 		"Matching files will be excluded from conversion")
 	flag.StringVarP(&handbrakePreset, "preset", "p", "", "Path to Handbrake preset used for conversion")
 	flag.IntVarP(&minimumSize, "min-size", "m", 1_000_000, "Minimum converted file size in bytes, will otherwise error and terminate")
-	flag.IntVarP(&bufferSize, "buffer-size", "b", 2, "Number of pending videos to always keep intact before starting to convert")
-	flag.IntVarP(&waitTime, "wait-time", "t", 10, "Time in seconds to wait since a video's modification time before starting conversion")
+	flag.IntVarP(&bufferSize, "buffer-size", "b", 0, "Number of pending videos to always keep intact before starting to convert")
+	flag.IntVarP(&waitTime, "wait-time", "t", 30, "Time in seconds to wait since a video was last modified before starting conversion")
 	flag.BoolVarP(&verbose, "verbose", "v", false, "Enable verbose logging")
 	flag.Parse()
 	if len(os.Args) < 2 {
@@ -151,9 +157,15 @@ func workLoop() error {
 		if err != nil {
 			return err
 		}
-		if info.ModTime().Add(time.Duration(waitTime) * time.Second).After(time.Now()) {
+		diffInfo, ok := fileStats[absDir]
+		if !ok || diffInfo.Size() != info.Size() || diffInfo.ModTime() != info.ModTime() {
+			fileStats[absDir] = FileDiffInfo{info, time.Now()}
 			continue
 		}
+		if diffInfo.CheckTime.Add(time.Duration(waitTime) * time.Second).After(time.Now()) {
+			continue
+		}
+		delete(fileStats, absDir)
 		videoMap[dir] = info
 		videoKeys = append(videoKeys, dir)
 	}
